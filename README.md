@@ -1,4 +1,4 @@
-<h1 align="center">Brightwheel Takeout</h1>
+<h1 align="center">Takeout for Brightwheel</h1>
 
 <p align="center">
   A one-click, browser-only exporter that gives Brightwheel guardians a permanent copy of every photo, note, and message from their child's account.
@@ -17,7 +17,7 @@
 
 ## Not affiliated with Brightwheel
 
-"Brightwheel" is a trademark of Brightwheel, Inc. Brightwheel Takeout is an independent, guardian-built data-portability tool. It is not made by, endorsed by, or affiliated with Brightwheel, Inc.
+"Brightwheel" is a trademark of Brightwheel, Inc. Takeout for Brightwheel is an independent, guardian-built data-portability tool. It is not made by, endorsed by, or affiliated with Brightwheel, Inc.
 
 ## For guardians
 
@@ -37,7 +37,7 @@ Source lives entirely under `src/`. The extension is Manifest V3, TypeScript, bu
 
 ## Privacy
 
-Brightwheel Takeout runs entirely in your browser. It reads your existing Brightwheel session cookie so it can call the same guardian-facing API that the Brightwheel web app itself calls, then writes the fetched content to a ZIP file (or a folder you pick) on your own computer. Nothing is uploaded, no telemetry is sent, and there is no server operated by the extension author. Full policy: [familytakeout.com/privacy](https://familytakeout.com/privacy).
+Takeout for Brightwheel runs entirely in your browser. It reads your existing Brightwheel session cookie so it can call the same guardian-facing API that the Brightwheel web app itself calls, then writes the fetched content to a ZIP file (or a folder you pick) on your own computer. Nothing is uploaded, no telemetry is sent, and there is no server operated by the extension author. Full policy: [familytakeout.com/privacy](https://familytakeout.com/privacy).
 
 ## License
 

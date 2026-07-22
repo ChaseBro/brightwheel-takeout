@@ -1,4 +1,4 @@
-// Render the Brightwheel Takeout icon set from SVG.
+// Render the Takeout for Brightwheel icon set from SVG.
 //
 // Design: rounded-square sage gradient (matches the takeout page's brand-mark)
 // with a stylized "bw" wordmark in cream, plus a small folded-corner-page

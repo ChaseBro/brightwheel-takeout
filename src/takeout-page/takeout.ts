@@ -98,7 +98,7 @@ function classifyError(err: unknown): FriendlyError {
   if (name === 'BwEnvironmentError') {
     return {
       title: 'Update Chrome to continue',
-      body: 'Brightwheel Takeout needs Chrome 116 or newer to save the archive to your disk. Update Chrome from google.com/chrome and reload this page.',
+      body: 'Takeout for Brightwheel needs Chrome 116 or newer to save the archive to your disk. Update Chrome from google.com/chrome and reload this page.',
       showOpenBw: false,
       primaryLabel: 'Reload',
     };
@@ -594,7 +594,7 @@ async function pickSaveFolder(): Promise<void> {
       if (!summary.clean) {
         const ok = window.confirm(
           `The folder "${handle.name ?? 'you picked'}" already has ${summary.nonBwFileCount} other files in it.\n\n` +
-          `Brightwheel Takeout will add photos/, notes.csv, viewer/, etc. alongside them — nothing existing will be deleted, but the archive will mix with your other stuff.\n\n` +
+          `Takeout for Brightwheel will add photos/, notes.csv, viewer/, etc. alongside them — nothing existing will be deleted, but the archive will mix with your other stuff.\n\n` +
           `Continue anyway, or Cancel and pick an empty folder?`,
         );
         if (!ok) {
@@ -1099,7 +1099,7 @@ function copyDiagnosticLog(): void {
   })();
   const tail = log.lines().slice(-200).map((l) => `${new Date(l.ts).toISOString()} ${l.level.padEnd(5)} ${l.msg}`).join('\n');
   const payload = [
-    `# Brightwheel Takeout diagnostic log`,
+    `# Takeout for Brightwheel diagnostic log`,
     `extension_version: ${version}`,
     `user_agent: ${navigator.userAgent}`,
     `error: ${lastError?.message ?? '(none)'}`,
