@@ -1,0 +1,44 @@
+{
+  "name": "brightwheel-takeout-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome MV3 extension: Google-Takeout-style exporter for Brightwheel.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && node scripts/package.mjs",
+    "bump:patch": "npm version patch --no-git-tag-version && node scripts/sync-version.mjs",
+    "bump:minor": "npm version minor --no-git-tag-version && node scripts/sync-version.mjs"
+  },
+  "dependencies": {
+    "client-zip": "^2.4.5",
+    "idb-keyval": "^6.2.1",
+    "piexifjs": "^1.0.6",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.28",
+    "@playwright/test": "^1.49.1",
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.10.5",
+    "@types/piexifjs": "^1.0.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "jsdom": "^25.0.1",
+    "sharp": "^0.35.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8",
+    "ws": "^8.18.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true,
+    "esbuild@0.25.12": true
+  }
+}

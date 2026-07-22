@@ -1,0 +1,223 @@
+/* Popup — the compact action layer.
+ *
+ * ~340px wide, up to ~600px tall (Chrome caps the popup height and lets the
+ * body scroll). Palette mirrors the takeout tab (lpc-web tokens) so the two
+ * surfaces feel like one product.
+ */
+:root {
+  --primary: #4A6FA5;
+  --secondary: #8D6E1C;
+  --sage: #8B9D77;
+  --sage-deep: #5F6E4F;
+  --sage-light: #C5D4BA;
+  --cream: #FAF8F4;
+  --cream-deep: #F0E9DD;
+  --surface: #FEFDFB;
+  --ink: #3D3832;
+  --ink-strong: #2A1F15;
+  --border: rgba(0,0,0,0.08);
+  --link: #3B5A85;
+  --error: #A44634;
+}
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+html, body { width: 340px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--cream);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---- Header ------------------------------------------------------------ */
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.logo {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--sage-light), var(--sage-deep));
+  flex-shrink: 0;
+  position: relative;
+}
+.logo::after {
+  content: "";
+  position: absolute; inset: 8px;
+  border-radius: 6px;
+  background: var(--cream);
+  clip-path: polygon(0 40%, 100% 40%, 100% 100%, 0 100%);
+}
+.popup-header h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--ink-strong);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.tagline { font-size: 0.78rem; color: var(--sage-deep); margin-top: 0.15rem; }
+
+/* ---- Body -------------------------------------------------------------- */
+.popup-body { padding: 0.9rem 1rem 0.5rem; display: flex; flex-direction: column; gap: 0.7rem; }
+
+.status {
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.83rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  line-height: 1.4;
+}
+.status--loading { color: var(--sage-deep); }
+.status--ok { border-color: var(--sage-light); background: #F3F7EF; color: var(--sage-deep); }
+.status--warn { border-color: #E8CFA3; background: #FBF3E2; color: #6B4E1D; }
+.status--error { border-color: #E9C6BE; background: #FBEDE8; color: #7C3C29; }
+.status strong { color: var(--ink-strong); }
+
+/* Detected students shown as small chips. */
+.students-chips {
+  display: flex; flex-wrap: wrap; gap: 0.3rem;
+}
+.student-chip {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--cream-deep);
+  color: var(--ink-strong);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+/* Compact scope preview banner. */
+.scope-preview {
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: var(--sage-light);
+  color: var(--ink-strong);
+  border: 1px solid rgba(95, 110, 79, 0.25);
+  font-size: 0.82rem;
+}
+.scope-preview__headline {
+  font-weight: 600;
+  color: var(--ink-strong);
+  margin-bottom: 0.15rem;
+  font-size: 0.87rem;
+}
+.scope-preview__meta {
+  color: var(--sage-deep);
+  font-size: 0.78rem;
+}
+.scope-preview--loading {
+  background: var(--cream-deep);
+  color: var(--sage-deep);
+  font-style: italic;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.scope-preview--error {
+  background: var(--cream-deep);
+  color: var(--sage-deep);
+  font-style: italic;
+}
+.scope-preview--hidden { display: none; }
+.scope-preview__spinner {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--sage-deep); border-top-color: transparent;
+  display: inline-block;
+  animation: scope-spin 0.85s linear infinite;
+}
+@keyframes scope-spin { to { transform: rotate(360deg); } }
+
+/* Resume + welcome-back banners share the shared render helpers' inner
+ * markup (welcome-inner / welcome-copy / welcome-actions, resume-inner
+ * / resume-title / resume-meta / resume-actions), so this file only tunes
+ * the wrapper padding / colour for the popup context. */
+.resume-panel, .welcome-panel {
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.resume-panel { background: var(--cream-deep); border-color: rgba(141, 110, 28, 0.28); }
+.welcome-panel { background: var(--sage-light); border-color: rgba(95, 110, 79, 0.28); }
+.resume-panel--hidden, .welcome-panel--hidden { display: none; }
+
+.welcome-inner { display: flex; flex-direction: column; gap: 0.55rem; }
+.welcome-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  font-size: 0.98rem;
+  color: var(--ink-strong);
+  line-height: 1.2;
+}
+.welcome-meta { font-size: 0.78rem; color: var(--ink); line-height: 1.4; }
+.welcome-meta b { color: var(--ink-strong); font-variant-numeric: tabular-nums; }
+.welcome-actions { display: flex; flex-direction: column; gap: 0.35rem; }
+.welcome-hint { color: var(--sage-deep); font-size: 0.72rem; text-align: center; }
+
+.resume-inner { display: flex; flex-direction: column; gap: 0.5rem; }
+.resume-title { font-weight: 600; color: var(--ink-strong); font-size: 0.9rem; }
+.resume-meta { color: var(--sage-deep); font-size: 0.78rem; }
+.resume-actions { display: flex; gap: 0.4rem; }
+.resume-actions .btn { flex: 1; padding: 0.5rem 0.75rem; font-size: 0.83rem; }
+
+/* ---- Buttons ----------------------------------------------------------- */
+.cta-stack {
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+.cta-stack:empty { display: none; }
+
+.btn {
+  display: inline-block;
+  font-weight: 600; font-size: 0.88rem;
+  text-decoration: none;
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, transform 0.15s, border-color 0.15s;
+  text-align: center;
+  line-height: 1.2;
+}
+.btn--block { width: 100%; }
+.btn--gold { background: var(--secondary); color: var(--surface); width: 100%; }
+.btn--gold:hover:not(:disabled) { background: var(--ink-strong); transform: translateY(-1px); }
+.btn--outline { background: transparent; color: var(--link); border-color: var(--link); }
+.btn--outline:hover:not(:disabled) { background: var(--link); color: var(--surface); }
+.btn--muted { background: transparent; color: var(--ink); border-color: var(--border); }
+.btn--muted:hover:not(:disabled) { background: var(--surface); border-color: var(--sage-deep); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- Secondary links --------------------------------------------------- */
+.link-muted {
+  display: block;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0.25rem 0;
+}
+.link-muted--small {
+  font-size: 0.72rem;
+  color: var(--sage-deep);
+}
+.link-muted:hover { color: var(--ink-strong); }
+
+/* ---- Footer ------------------------------------------------------------ */
+.popup-footer {
+  display: flex; gap: 0.35rem;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem 1rem 0.7rem;
+  font-size: 0.72rem;
+  color: var(--sage-deep);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.popup-footer a { color: var(--link); text-decoration: none; }
+.popup-footer a:hover { text-decoration: underline; }

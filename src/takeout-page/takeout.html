@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brightwheel Takeout</title>
+<link rel="stylesheet" href="./takeout.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand brand--link" href="./takeout.html" aria-label="Brightwheel Takeout home">
+      <img class="brand-mark" src="/icons/icon-128.png" alt="" width="52" height="52" />
+      <div>
+        <h1>Brightwheel Takeout</h1>
+        <p class="tagline">Your family's Brightwheel, in one export.</p>
+      </div>
+    </a>
+    <div class="brand-meta">
+      <span class="badge">Runs entirely in your browser</span>
+    </div>
+  </div>
+</header>
+
+<main class="container main">
+  <section id="resume-panel" class="panel panel--resume panel--hidden" aria-live="polite"></section>
+
+  <section id="welcome-back" class="panel panel--welcome panel--hidden" aria-live="polite"></section>
+  <section id="perma-failed-panel" class="panel panel--resume panel--hidden" aria-live="polite"></section>
+  <section id="discovery-warning-panel" class="panel panel--resume panel--hidden" aria-live="polite"></section>
+
+  <section id="detect-panel" class="panel panel--hidden">
+    <h2>Detection details</h2>
+    <p class="lead">This page ran in detection-only mode — nothing was exported. Copy the summary below and share it with the developer.</p>
+    <pre id="detect-output" class="log-tail"></pre>
+    <div class="actions">
+      <button id="detect-copy" class="btn btn--outline">Copy details</button>
+      <a href="./takeout.html" class="btn btn--muted">Back to export</a>
+    </div>
+  </section>
+
+  <section id="pre-run" class="panel">
+    <h2>Ready to export</h2>
+    <p class="lead">
+      We'll fetch every note, message, and photo your Brightwheel guardian
+      account can see, then save them to your computer. Nothing leaves your
+      browser except the requests to Brightwheel itself.
+    </p>
+
+    <div id="student-panel" class="students">
+      <div class="student-row student-row--placeholder">Loading students…</div>
+    </div>
+
+    <div id="scope-preview" class="scope-preview scope-preview--loading" aria-live="polite">
+      <span class="scope-preview__spinner" aria-hidden="true"></span>
+      Peeking at Brightwheel to see how big this export will be…
+    </div>
+
+    <!-- Quick-start: default action for first-time / uncustomized users. -->
+    <div id="quick-start" class="quick-start">
+      <button id="quick-start-btn" class="btn btn--gold btn--large">Download everything to a folder</button>
+      <div class="quick-start-hint">Photos + notes + messages + an offline browser page. We'll ask you to pick where to save it.</div>
+      <button type="button" id="customize-toggle" class="link-muted link-muted--small">
+        Customize what to include, date range, or format &rsaquo;
+      </button>
+    </div>
+
+    <!-- Everything below is hidden until the user clicks Customize. -->
+    <div id="customize-panel" hidden>
+      <!-- Section: What to include -->
+      <fieldset class="settings-section">
+        <legend>What to include</legend>
+        <label class="check-row">
+          <input type="checkbox" id="include-photos" checked>
+          <span>Photos</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="include-notes" checked>
+          <span>Teacher notes</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="include-messages" checked>
+          <span>Messages</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="include-viewer" checked>
+          <span>Little album page you can open offline</span>
+        </label>
+        <label class="check-row check-row--secondary">
+          <input type="checkbox" id="include-daily-reports">
+          <span>
+            Include daily reports (health, food, naps, potty, incidents)
+            <span class="check-hint">Off by default — the volume can be huge for long enrollments.</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <!-- Section: Date range -->
+      <fieldset class="settings-section">
+        <legend>Date range</legend>
+        <div class="preset-chips" role="group" aria-label="Date presets">
+          <button type="button" class="chip chip--active" data-preset="all">Everything</button>
+          <button type="button" class="chip" data-preset="30d">Last 30 days</button>
+          <button type="button" class="chip" data-preset="90d">Last 90 days</button>
+          <button type="button" class="chip" data-preset="year">This year</button>
+          <button type="button" class="chip chip--hidden" data-preset="since-last" id="chip-since-last">Since my last export</button>
+        </div>
+        <div class="date-inputs">
+          <label>From <input type="date" id="date-from"></label>
+          <label>To <input type="date" id="date-to"></label>
+        </div>
+      </fieldset>
+
+      <!-- Section: Format (hidden when only photos are selected — the CSV/
+           XLSX/JSON choice has no effect on JPG output) -->
+      <fieldset id="format-section" class="settings-section">
+        <legend>Format</legend>
+        <label class="radio-row">
+          <input type="radio" name="format" value="csv" checked>
+          <span><strong>CSV</strong> — one file per kind, opens in Excel, Numbers, Google Sheets</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="format" value="xlsx">
+          <span><strong>Excel workbook (.xlsx)</strong> — everything in one file with tabs</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="format" value="json">
+          <span><strong>JSON</strong> — machine-readable, best for developers</span>
+        </label>
+      </fieldset>
+
+      <!-- Section: Advanced (collapsed) -->
+      <details class="settings-section settings-section--advanced">
+        <summary>Advanced</summary>
+        <label class="check-row check-row--hidden" id="skip-already-row">
+          <input type="checkbox" id="skip-already-exported">
+          <span id="skip-already-label">Skip items I already exported to this browser</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="debug-mode">
+          <span><strong>Debug mode</strong> — Makes the export much larger and includes technical logs. Enable this only when the developer asks you to.</span>
+        </label>
+      </details>
+
+      <!-- Save-target picker (two-button flow) -->
+      <div class="save-target">
+        <div class="save-target-buttons">
+          <button id="choose-save-zip" class="btn btn--outline">Save as ZIP file…</button>
+          <button id="choose-save-folder" class="btn btn--outline">Save to a folder…</button>
+        </div>
+        <span id="save-hint" class="hint">Pick either a ZIP file location or a folder to save into.</span>
+        <div id="folder-tip" class="hint hint--tip" hidden>
+          Tip: create an empty folder in <b>Documents</b> called
+          <code id="folder-tip-name">Brightwheel-Takeout</code>, then pick it here.
+          Re-runs into the same folder merge new items in cleanly.
+        </div>
+        <span id="zip-resume-note" class="hint hint--note" hidden>Resume requires a folder — pick that instead, or Discard the checkpoint above to start fresh.</span>
+      </div>
+
+      <div class="actions">
+        <button id="start" class="btn btn--gold" disabled>Start takeout</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="progress" class="panel panel--hidden">
+    <h2 id="progress-title">Exporting…</h2>
+    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    <div class="progress-meta">
+      <span id="progress-step">Getting started…</span>
+      <span id="progress-counter" class="mono"></span>
+    </div>
+    <div id="current-file" class="mono current-file"></div>
+    <div class="actions">
+      <button id="stop-btn" class="btn btn--muted">Stop</button>
+      <span class="hint">Progress so far is saved — you can Resume later.</span>
+    </div>
+    <details class="log-details">
+      <summary>Show log</summary>
+      <pre id="log-tail" class="log-tail"></pre>
+    </details>
+  </section>
+
+  <section id="error-panel" class="panel panel--error panel--hidden" aria-live="assertive">
+    <h2 id="error-title">Something went wrong</h2>
+    <p id="error-body" class="lead"></p>
+    <div class="actions">
+      <button id="error-primary" class="btn btn--gold">Try again</button>
+      <a id="error-open-bw" class="btn btn--outline" href="https://schools.mybrightwheel.com" target="_blank" rel="noopener" hidden>Open Brightwheel</a>
+      <button id="error-copy-log" class="btn btn--muted">Copy diagnostic log</button>
+      <button id="error-report-bug" class="btn btn--muted">Report this to Chase</button>
+      <span id="error-copy-ack" class="hint hint--ack" hidden>Copied ✓</span>
+    </div>
+    <div id="debug-suggest" class="debug-suggest" hidden>
+      <span class="debug-suggest__icon" aria-hidden="true">🐛</span>
+      <div>
+        <b>Want to help us fix this?</b>
+        <button type="button" id="debug-suggest-enable" class="link-muted">Enable Debug mode</button>
+        and try again — it'll capture the raw Brightwheel responses that led to the error.
+        The next export will be bigger but ships a folder of diagnostics.
+      </div>
+    </div>
+    <details class="log-details">
+      <summary>Show details</summary>
+      <pre id="error-details" class="log-tail"></pre>
+    </details>
+  </section>
+
+  <section id="done" class="panel panel--hidden panel--done">
+    <div class="check-icon" aria-hidden="true">✓</div>
+    <h2>Archive saved</h2>
+    <p id="done-summary" class="lead">Your Brightwheel archive is on disk.</p>
+
+    <div id="done-contents" class="done-contents"></div>
+
+    <div class="done-next">
+      <div class="done-next__title">What to do next</div>
+      <ul class="done-next__list" id="done-next-list"></ul>
+    </div>
+
+    <div class="done-refresh">
+      Come back in a month or two to grab whatever's new — click the Brightwheel
+      Takeout icon and hit <b>Get anything new since <span id="done-refresh-date">today</span></b>.
+    </div>
+
+    <div class="actions">
+      <button id="restart" class="btn btn--outline">Export again</button>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-row">
+    <p>Brightwheel Takeout · runs entirely in your browser · <a href="https://github.com/ChaseBro/brightwheel-takeout" target="_blank" rel="noopener">Source</a></p>
+  </div>
+</footer>
+
+<script type="module" src="./takeout.ts"></script>
+</body>
+</html>

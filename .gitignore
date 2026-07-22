@@ -1,0 +1,27 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Build output
+dist/
+.vite/
+
+# Test artifacts
+playwright-report/
+test-results/
+tests/fixtures/
+coverage/
+
+# Packaged release zips (produced by `npm run package`)
+releases/
+
+# Env / secrets
+.env
+.env.local
+.secrets.json
+
+# Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json.example

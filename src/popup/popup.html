@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=340, initial-scale=1">
+<title>Brightwheel Takeout</title>
+<link rel="stylesheet" href="./popup.css">
+</head>
+<body>
+<header class="popup-header">
+  <img class="logo" src="/icons/icon-128.png" alt="" width="40" height="40" />
+  <div>
+    <h1>Brightwheel Takeout</h1>
+    <p class="tagline">Your family's Brightwheel, in one export.</p>
+  </div>
+</header>
+
+<section class="popup-body">
+  <!-- Session status (login-required / retry / detected roster line). -->
+  <div id="status" class="status status--loading">Checking Brightwheel session…</div>
+
+  <!-- Detected students as compact chip list. Hidden until roster loads. -->
+  <div id="students" class="students-chips" hidden></div>
+
+  <!-- Compact scope preview: photos + size + duration. Hidden until peek starts. -->
+  <div id="scope-preview" class="scope-preview scope-preview--hidden" aria-live="polite"></div>
+
+  <!-- Resume banner: unfinished checkpoint from a prior run. -->
+  <div id="resume-panel" class="resume-panel resume-panel--hidden" aria-live="polite"></div>
+
+  <!-- Welcome-back banner: history exists, primary CTA is "get anything new". -->
+  <div id="welcome-back" class="welcome-panel welcome-panel--hidden" aria-live="polite"></div>
+
+  <!-- Primary + secondary CTAs. Populated dynamically based on state. -->
+  <div id="cta-stack" class="cta-stack"></div>
+
+  <!-- Customize link + detect-only escape hatch. -->
+  <a id="customize-link" class="link-muted" href="#" hidden>Customize (opens full page)</a>
+  <a id="detect-only-link" class="link-muted link-muted--small" href="#">
+    Run detection only (don't export)
+  </a>
+</section>
+
+<footer class="popup-footer">
+  <span>v<span id="version"></span></span>
+  <span aria-hidden="true">·</span>
+  <a id="open-bw" href="https://schools.mybrightwheel.com" target="_blank" rel="noopener">Open Brightwheel</a>
+</footer>
+<script type="module" src="./popup.ts"></script>
+</body>
+</html>
