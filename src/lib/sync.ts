@@ -1,7 +1,6 @@
 // Cross-device dedupe hook. Only NullSync is wired at launch; RemoteSync is
 // scaffolded so a later release can turn on cross-device incremental exports
-// without touching the run orchestrator. See docs/01-architecture.md for the
-// (post-launch) auth model.
+// without touching the run orchestrator.
 
 import type { ExportEvent } from '@/scraper/types.js';
 

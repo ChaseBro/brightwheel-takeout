@@ -2,9 +2,8 @@
 // takeout page can offer "Since my last export" + "Skip already-exported".
 //
 // Backend-less by design: the first release ships without any auth or
-// remote store. Once the sync backend from docs/01-architecture.md § "Cross-
-// device dedupe" ships, RemoteSync + this local mirror can be reconciled
-// (the shape overlaps intentionally).
+// remote store. Once the cross-device sync backend ships, RemoteSync + this
+// local mirror can be reconciled (the shape overlaps intentionally).
 //
 import { LruStringSet } from './lru-string-set.js';
 
