@@ -172,7 +172,19 @@ const paths = (await walk(DIST_DIR)).sort();
 const files = await Promise.all(
   paths.map(async (p) => {
     const rel = relative(DIST_DIR, p).split(sep).join('/');
-    const data = await fs.readFile(p);
+    let data = await fs.readFile(p);
+    // Chrome Web Store rejects any manifest that includes a `key` field —
+    // CWS is the authority on the extension ID and won't accept a manifest
+    // that tries to pin one. Local dev keeps the key (pins the ID across
+    // load-unpacked reloads so `content_scripts` and dev tooling stay
+    // consistent); strip it out of the CWS artifact only.
+    if (rel === 'manifest.json') {
+      const manifest = JSON.parse(data.toString('utf8'));
+      if ('key' in manifest) {
+        delete manifest.key;
+        data = Buffer.from(JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+      }
+    }
     return { archivePath: rel, data };
   })
 );
