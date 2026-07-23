@@ -34,7 +34,7 @@ export interface ViewerData {
     /**
      * Enriched context populated by the metadata orchestrator. Optional so
      * older archives (pre-metadata) still render — the viewer degrades to
-     * the plain "Brightwheel Takeout" header when these are absent.
+     * the plain "Takeout for Brightwheel" header when these are absent.
      */
     schools?: Record<string, { schoolId: string; name?: string; timeZone?: string; city?: string; state?: string }>;
     student_profiles?: Record<string, {
@@ -78,7 +78,7 @@ export function renderViewerHtml(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brightwheel Takeout — Archive</title>
+<title>Takeout for Brightwheel — Archive</title>
 <style>
   :root {
     --primary: #4A6FA5;
@@ -256,11 +256,12 @@ export function renderViewerHtml(): string {
     color: var(--sage-deep); font-size: 0.85rem; text-align: center;
     border-top: 1px solid var(--border);
   }
+  .viewer-disclaimer { opacity: 0.75; }
 </style>
 </head>
 <body>
 <header>
-  <h1 id="header-title">Brightwheel Takeout</h1>
+  <h1 id="header-title">Takeout for Brightwheel</h1>
   <div class="meta" id="meta">Loading archive…</div>
   <div class="meta students" id="header-students"></div>
   <div class="controls">
@@ -284,6 +285,7 @@ export function renderViewerHtml(): string {
 <main id="root"><p class="empty">Loading…</p></main>
 <footer>
   <span id="footer-meta"></span>
+  <span class="viewer-disclaimer"> · Not affiliated with Brightwheel, Inc.</span>
 </footer>
 
 <div class="lightbox hidden" id="lightbox">
@@ -347,7 +349,7 @@ export function renderViewerHtml(): string {
 
   // Enriched header: append the school name to the H1 when known, and list
   // the students with their classroom below. Additive — an archive without
-  // these fields still shows the plain "Brightwheel Takeout" title.
+  // these fields still shows the plain "Takeout for Brightwheel" title.
   var manifest = DATA.manifest || {};
   var schools = manifest.schools || {};
   var profiles = manifest.student_profiles || {};
@@ -358,7 +360,7 @@ export function renderViewerHtml(): string {
   });
   var titleEl = document.getElementById('header-title');
   if (titleEl && schoolNames.length > 0) {
-    titleEl.textContent = 'Brightwheel Takeout — ' + schoolNames.join(' & ');
+    titleEl.textContent = 'Takeout for Brightwheel — ' + schoolNames.join(' & ');
   }
   var studentSummary = [];
   Object.keys(profiles).forEach(function (sid) {
@@ -383,7 +385,7 @@ export function renderViewerHtml(): string {
   document.getElementById('footer-meta').textContent =
     'Exported ' + fetchedAt +
     (DATA.manifest && DATA.manifest.extensionVersion
-      ? ' · Brightwheel Takeout v' + DATA.manifest.extensionVersion
+      ? ' · Takeout for Brightwheel v' + DATA.manifest.extensionVersion
       : '');
 
   function escapeHtml(s) {

@@ -478,3 +478,8 @@ h1, h2, h3 {
   text-align: center;
 }
 .site-footer a { color: var(--link); }
+.site-footer .disclaimer {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
