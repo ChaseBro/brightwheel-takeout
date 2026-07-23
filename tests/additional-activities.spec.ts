@@ -92,14 +92,16 @@ describe('additional-activities', () => {
     expect(out.emptyProbes.some((e) => e.kind === 'ac_medication')).toBe(true);
   });
 
-  it('fetchAdditionalActivities re-throws BwAuthError (session expiry propagates)', async () => {
+  it('fetchAdditionalActivities degrades on 401 (metadata probe, not a primary path)', async () => {
+    // Additional-activity kinds are best-effort probes — a 401 from any kind
+    // should log a warning and return that kind as empty, not kill the run.
+    // Session expiry still surfaces on the primary notes/photos/messages paths.
     const fetchImpl = vi.fn().mockResolvedValue(json(401, {})) as unknown as typeof fetch;
-    await expect(
-      fetchAdditionalActivities(client(fetchImpl), ['stu-1'], {
-        kinds: ['ac_food'],
-        delayMs: 0,
-      }),
-    ).rejects.toMatchObject({ name: 'BwAuthError' });
+    const out = await fetchAdditionalActivities(client(fetchImpl), ['stu-1'], {
+      kinds: ['ac_food'],
+      delayMs: 0,
+    });
+    expect(out.byKind.ac_food).toEqual([]);
   });
 
   it('fetchAdditionalActivities honors AbortSignal between kinds', async () => {
