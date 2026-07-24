@@ -24,8 +24,11 @@ export default defineManifest({
   manifest_version: 3,
   name: 'Takeout for Brightwheel',
   short_name: 'BW Takeout',
+  // Chrome Web Store uses this as the pre-populated "Summary" on the listing
+  // (max 132 chars). Keeping it in sync with docs/cws/listing.md's polished
+  // copy so a re-upload doesn't overwrite the dashboard-edited summary.
   description:
-    'Google-Takeout-style exporter for Brightwheel. One-shot ZIP of every photo, note, and message for your family.',
+    "One-click export of every photo, note, and message from your child's Brightwheel account. Runs entirely in your browser.",
   version: pkg.version,
   // @crxjs types `author` as { email } (Chrome's own MV3 accepts a plain
   // string too, but we go with what the plugin's types allow). CWS uses the
