@@ -263,4 +263,101 @@ describe('run + metadata + daily reports', () => {
     expect(called.some((u) => u.includes('action_type=ac_food'))).toBe(false);
     expect(called.some((u) => u.includes('action_type=ac_nap'))).toBe(false);
   }, 15_000);
+
+  // Regression coverage for the full session-expiry propagation path:
+  // notes/messages succeed (session was alive when the export started),
+  // then a later best-effort probe genuinely 401s (session died mid-run).
+  // Before the fix, both collectMetadata's internal probes AND
+  // fetchAdditionalActivities logged a warning and kept going, so the
+  // export finished "successfully" with silently missing data. run()
+  // must reject with BwAuthError instead so the caller can prompt
+  // re-login — see src/scraper/metadata.ts and
+  // src/scraper/additional-activities.ts.
+  it('rejects with BwAuthError when the session expires mid metadata-collection (does not finish "successfully")', async () => {
+    const fetchImpl = vi.fn().mockImplementation(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/message_threads/thr-1/messages')) return json({ results: [], has_more: false });
+      if (url.includes('/api/v1/students/stu-1/activities')) {
+        const u = new URL(url);
+        if (u.searchParams.get('page') !== '0') return json({ activities: [] });
+        if (u.searchParams.get('action_type') === 'ac_note') {
+          return json({
+            activities: [
+              {
+                object_id: 'note-1',
+                action_type: 'ac_note',
+                event_date: '2026-07-17T12:00:00Z',
+                actor: { object_id: 'a-1', first_name: 'Amanda', last_name: 'T' },
+                target: { object_id: 'stu-1', first_name: 'Eliza', last_name: 'B' },
+                room: ROOM,
+                note: 'A note',
+              },
+            ],
+            count: 1,
+          });
+        }
+        return json({ activities: [] });
+      }
+      // Session has died by the time metadata collection probes the
+      // student-profile endpoint — the primary notes/messages fetch above
+      // already succeeded, so this is squarely the "expired mid-run" case.
+      if (url.endsWith('/api/v1/students/stu-1')) return jsonStatus(401, {});
+      return jsonStatus(404, {});
+    }) as unknown as typeof fetch;
+
+    const { root, files } = memFolder();
+    await expect(
+      run({
+        session: makeSession(),
+        sink: new FolderSink(root),
+        progress: { post: () => {} },
+        sync: new NullSync(),
+        fetchImpl,
+        clock: () => 1_700_000_000_000,
+        extensionVersion: '0.1.0-test',
+        format: 'json',
+        include: { photos: false, notes: true, messages: true, viewer: true, dailyReports: false },
+      }),
+    ).rejects.toMatchObject({ name: 'BwAuthError' });
+
+    // No manifest.json committed — the export did NOT finish "successfully"
+    // with silently-missing metadata.
+    expect(files.has('manifest.json')).toBe(false);
+  }, 15_000);
+
+  it('rejects with BwAuthError when the session expires mid daily-reports fetch', async () => {
+    const fetchImpl = vi.fn().mockImplementation(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/message_threads/')) return json({ results: [], has_more: false });
+      if (url.includes('/api/v1/students/stu-1/activities')) {
+        const u = new URL(url);
+        if (u.searchParams.get('page') !== '0') return json({ activities: [] });
+        const type = u.searchParams.get('action_type');
+        if (type === 'ac_note') return json({ activities: [] });
+        // First daily-report kind probed (ac_health_check, per
+        // DAILY_REPORT_ACTION_TYPES order) hits a dead session.
+        if (type === 'ac_health_check') return jsonStatus(401, {});
+        return json({ activities: [] });
+      }
+      return jsonStatus(404, {});
+    }) as unknown as typeof fetch;
+
+    const { root, files } = memFolder();
+    await expect(
+      run({
+        session: makeSession(),
+        sink: new FolderSink(root),
+        progress: { post: () => {} },
+        sync: new NullSync(),
+        fetchImpl,
+        clock: () => 1_700_000_000_000,
+        extensionVersion: '0.1.0-test',
+        format: 'csv',
+        include: { photos: false, notes: true, messages: true, viewer: false, dailyReports: true },
+      }),
+    ).rejects.toMatchObject({ name: 'BwAuthError' });
+
+    expect(files.has('daily-reports.csv')).toBe(false);
+    expect(files.has('manifest.json')).toBe(false);
+  }, 15_000);
 });

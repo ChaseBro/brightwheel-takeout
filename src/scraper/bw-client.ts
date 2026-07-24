@@ -119,6 +119,25 @@ export class BwClient {
   requestCount = 0;
   /** Whether we've already logged the "over-budget" warning this run. */
   private budgetWarned = false;
+  /**
+   * Sticky flag: true once ANY request on this client has hit a genuine
+   * 401 (unauthenticated — the session cookie is gone/expired). We do NOT
+   * set this for 403s: BW returns 403 on some endpoints (e.g.
+   * /schools/{id}, /schools/{id}/staff) as a per-guardian permission
+   * policy even on a perfectly healthy session, so 403 alone is not
+   * evidence of session death. Best-effort metadata probes (school,
+   * student-profile, staff) deliberately swallow individual 401/403s so
+   * one forbidden sub-resource doesn't sink the whole probe step — but
+   * once *any* of them see a real 401, `sessionExpired` flips permanently
+   * true so an aggregator (e.g. collectMetadata) can detect "the session
+   * actually died partway through" even though every individual probe
+   * degraded quietly. See metadata.ts / additional-activities.ts.
+   */
+  private _sessionExpired = false;
+
+  get sessionExpired(): boolean {
+    return this._sessionExpired;
+  }
 
   constructor(session: BwClientSession, opts: BwClientOptions = {}) {
     this.session = session;
@@ -318,6 +337,10 @@ export class BwClient {
           }
         }
         if (res.status === 401 || res.status === 403) {
+          // 401 = definitively unauthenticated (session cookie gone/expired).
+          // 403 alone is NOT — some endpoints 403 by per-guardian policy on
+          // an otherwise-healthy session. Only 401 marks the session dead.
+          if (res.status === 401) this._sessionExpired = true;
           throw new BwAuthError(res.status, `${res.status} on ${short(url)}`);
         }
         if (res.status === 404) {
