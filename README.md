@@ -12,7 +12,7 @@
 
 - Downloads every photo your child was tagged in, at the highest resolution Brightwheel exposes to guardians, with the Brightwheel event date stamped into EXIF so Apple Photos / Google Photos sort them correctly.
 - Downloads every teacher note and every parent-school message thread as structured JSON and as a rendered HTML timeline.
-- Bundles a standalone `index.html` viewer inside the archive so it's browsable offline forever.
+- Bundles a standalone `viewer/index.html` inside the archive so it's browsable offline forever.
 - Runs entirely inside your own browser. No third-party server ever sees your session, your child's photos, or that you used the extension at all.
 
 ## Not affiliated with Brightwheel
@@ -27,13 +27,28 @@ Once the Chrome Web Store listing goes live, install from there. Until then, loa
 
 ```bash
 npm install
+npm run typecheck  # tsc --noEmit
 npm test           # vitest unit tests
-npm run test:e2e   # Playwright end-to-end with mocked Brightwheel
-npm run build      # produces dist/
+npm run build      # produces dist/ — required before test:e2e, since it loads the built extension
+npm run test:e2e   # Playwright end-to-end, extension loaded into a real Chromium, Brightwheel mocked
 npm run package    # produces releases/brightwheel-takeout-v<version>.zip
 ```
 
+`npm test` doesn't require any special setup or access to a real Brightwheel account — it exercises
+the scraper/lib modules against fixture data, synthesizing minimal fixtures automatically if the
+maintainer's personal fixture source isn't present.
+
 Source lives entirely under `src/`. The extension is Manifest V3, TypeScript, bundled with Vite via `@crxjs/vite-plugin`.
+
+## Permissions
+
+Verified against [`src/manifest.ts`](src/manifest.ts), the source of truth for what's actually requested:
+
+- **`permissions`: `storage`** — only. Used for `chrome.storage.local` (session/history snapshot) and `chrome.storage.session` (a short-lived discovery cache). That's the entire `permissions` array — no `cookies`, no `activeTab`, no `tabs`.
+- **`host_permissions`: `https://schools.mybrightwheel.com/*`, `https://cdn.mybrightwheel.com/*`** — the Brightwheel app itself and the CloudFront-backed CDN that serves your child's photos. Nothing else. These two hosts are also the only ones the extension ever fetches from.
+- The session cookie is **never read via a `chrome.cookies.*` call** — there is no such call anywhere in this codebase. It rides along automatically on `fetch()` requests via `credentials: 'include'`, because `host_permissions` already covers the domain it's scoped to.
+
+If you're reviewing this for the Chrome Web Store or as a privacy-conscious guardian, the two bullet points above are the complete permission surface — there is nothing broader hiding elsewhere in the manifest.
 
 ## Privacy
 
