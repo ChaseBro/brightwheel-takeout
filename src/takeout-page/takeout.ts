@@ -66,9 +66,9 @@ function classifyError(err: unknown): FriendlyError {
   if (name === 'BwAuthError') {
     return {
       title: 'Your Brightwheel session expired',
-      body: 'Open Brightwheel in another tab, log in again, then come back here and click Resume.',
+      body: 'Open Brightwheel in another tab and log in again. Then come back and click “Reload & resume” — the page reloads and picks your export back up from where it stopped. Your progress so far is saved.',
       showOpenBw: true,
-      primaryLabel: 'Resume',
+      primaryLabel: 'Reload & resume',
     };
   }
   if (name === 'BwRateLimitError') {
@@ -98,7 +98,7 @@ function classifyError(err: unknown): FriendlyError {
   if (name === 'BwEnvironmentError') {
     return {
       title: 'Update Chrome to continue',
-      body: 'Brightwheel Takeout needs Chrome 116 or newer to save the archive to your disk. Update Chrome from google.com/chrome and reload this page.',
+      body: 'Takeout for Brightwheel needs Chrome 116 or newer to save the archive to your disk. Update Chrome from google.com/chrome and reload this page.',
       showOpenBw: false,
       primaryLabel: 'Reload',
     };
@@ -112,6 +112,21 @@ function classifyError(err: unknown): FriendlyError {
 }
 
 let lastError: { err: unknown; message: string } | null = null;
+
+/**
+ * Move keyboard/screen-reader focus to an element (typically a panel heading)
+ * after a panel swap. Without this, hiding the focused element via
+ * `panel--hidden` (display:none) silently drops focus back to <body>, so a
+ * keyboard user's next Tab restarts at the top of the page and a screen-reader
+ * user gets no signal that the view changed. Headings aren't focusable by
+ * default, so add a programmatic-only tabindex.
+ */
+function moveFocusTo(elId: string): void {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  el.focus();
+}
 
 function showError(err: unknown): void {
   const info = classifyError(err);
@@ -139,6 +154,9 @@ function showError(err: unknown): void {
     primary.textContent = info.primaryLabel;
     primary.onclick = () => window.location.reload();
   }
+  // Move focus to the error heading so keyboard/screen-reader users land on the
+  // new view (and hear the error) instead of silently losing focus to <body>.
+  moveFocusTo('error-title');
   // C: nudge the user to enable Debug mode for code bugs (not for
   // user-fixable errors like auth expiry or rate-limit).
   const suggest = $<HTMLDivElement>('debug-suggest');
@@ -594,7 +612,7 @@ async function pickSaveFolder(): Promise<void> {
       if (!summary.clean) {
         const ok = window.confirm(
           `The folder "${handle.name ?? 'you picked'}" already has ${summary.nonBwFileCount} other files in it.\n\n` +
-          `Brightwheel Takeout will add photos/, notes.csv, viewer/, etc. alongside them — nothing existing will be deleted, but the archive will mix with your other stuff.\n\n` +
+          `Takeout for Brightwheel will add photos/, notes.csv, viewer/, etc. alongside them — nothing existing will be deleted, but the archive will mix with your other stuff.\n\n` +
           `Continue anyway, or Cancel and pick an empty folder?`,
         );
         if (!ok) {
@@ -699,6 +717,8 @@ async function startRun(opts: { resume?: boolean } = {}): Promise<void> {
   if (pre) pre.classList.add('panel--hidden');
   if (prog) prog.classList.remove('panel--hidden');
   if (done) done.classList.add('panel--hidden');
+  // Move focus into the progress view so keyboard/AT users follow the swap.
+  moveFocusTo('progress-title');
 
   const port = chrome.runtime.connect({ name: 'bw-takeout:keepalive' });
   log.mirrorToConsole = true;
@@ -820,6 +840,9 @@ async function startRun(opts: { resume?: boolean } = {}): Promise<void> {
     if (prog) prog.classList.add('panel--hidden');
     if (done) done.classList.remove('panel--hidden');
     renderDone(result, saveTarget, include, format);
+    // Move focus to the success heading so keyboard/AT users are taken to the
+    // "did it work?" confirmation instead of losing focus to <body>.
+    moveFocusTo('done-title');
     pendingResume = null;
   } catch (err) {
     if ((err as Error).name === 'BwCancelledError') {
@@ -959,22 +982,46 @@ function renderDiscoveryWarning(
   `;
 }
 
+// Human-facing phase labels for the screen-reader announcer, keyed by the
+// ProgressUpdate.step values run() posts. Kept deliberately coarse — the
+// announcer fires once per phase, not per item.
+const PHASE_LABELS: Record<string, string> = {
+  photos: 'Downloading photos',
+  notes: 'Saving notes',
+  messages: 'Saving messages',
+  metadata: 'Collecting profile and school details',
+  'daily-reports': 'Downloading daily reports',
+  viewer: 'Building the offline viewer',
+  done: 'Export complete',
+};
+let lastAnnouncedPhase = '';
+
 function renderProgress(u: ProgressUpdate): void {
   const fill = $<HTMLDivElement>('progress-fill');
+  const bar = $<HTMLDivElement>('progress-bar');
   const step = $<HTMLSpanElement>('progress-step');
   const counter = $<HTMLSpanElement>('progress-counter');
   const currentFile = $<HTMLDivElement>('current-file');
+  const live = $<HTMLSpanElement>('progress-live');
   const logEl = $<HTMLPreElement>('log-tail');
   if (step) step.textContent = u.message ?? u.step;
   if (counter && typeof u.current === 'number') {
     counter.textContent = u.total ? `${u.current} / ${u.total}` : `${u.current}`;
   }
   if (currentFile) currentFile.textContent = u.currentFile ?? '';
-  if (fill && typeof u.current === 'number' && typeof u.total === 'number' && u.total > 0) {
-    const pct = Math.min(100, Math.max(0, (u.current / u.total) * 100));
-    fill.style.width = `${pct}%`;
+  let pct: number | null = null;
+  if (typeof u.current === 'number' && typeof u.total === 'number' && u.total > 0) {
+    pct = Math.min(100, Math.max(0, (u.current / u.total) * 100));
   }
-  if (u.step === 'done' && fill) fill.style.width = '100%';
+  if (u.step === 'done') pct = 100;
+  if (fill && pct !== null) fill.style.width = `${pct}%`;
+  if (bar && pct !== null) bar.setAttribute('aria-valuenow', String(Math.round(pct)));
+  // Announce only on a phase change, so screen readers get the "is it working /
+  // did it finish" signal without a flood of per-item counter updates.
+  if (live && u.step && u.step !== lastAnnouncedPhase) {
+    lastAnnouncedPhase = u.step;
+    live.textContent = PHASE_LABELS[u.step] ?? u.message ?? u.step;
+  }
   if (logEl) logEl.textContent = log.toText();
 }
 
@@ -1099,7 +1146,7 @@ function copyDiagnosticLog(): void {
   })();
   const tail = log.lines().slice(-200).map((l) => `${new Date(l.ts).toISOString()} ${l.level.padEnd(5)} ${l.msg}`).join('\n');
   const payload = [
-    `# Brightwheel Takeout diagnostic log`,
+    `# Takeout for Brightwheel diagnostic log`,
     `extension_version: ${version}`,
     `user_agent: ${navigator.userAgent}`,
     `error: ${lastError?.message ?? '(none)'}`,

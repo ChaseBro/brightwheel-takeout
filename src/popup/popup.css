@@ -6,7 +6,7 @@
  */
 :root {
   --primary: #4A6FA5;
-  --secondary: #8D6E1C;
+  --secondary: #7A5E16;
   --sage: #8B9D77;
   --sage-deep: #5F6E4F;
   --sage-light: #C5D4BA;
@@ -191,6 +191,7 @@ body {
 .btn--muted { background: transparent; color: var(--ink); border-color: var(--border); }
 .btn--muted:hover:not(:disabled) { background: var(--surface); border-color: var(--sage-deep); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
 
 /* ---- Secondary links --------------------------------------------------- */
 .link-muted {
