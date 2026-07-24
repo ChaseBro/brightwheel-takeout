@@ -23,7 +23,7 @@ import type {
 import type { Sync } from '@/lib/sync.js';
 import type { RingLogger } from '@/lib/log.js';
 import { NullSync } from '@/lib/sync.js';
-import { BwClient } from './bw-client.js';
+import { BwClient, BwAuthError } from './bw-client.js';
 import { iterateActivities } from './activities.js';
 import { fetchThreadMessages } from './messages.js';
 import { downloadPhotoStream, makeRefetchUrl, planPhotoEntry } from './photos.js';
@@ -345,6 +345,18 @@ async function downloadPhotos(ctx: RunCtx): Promise<void> {
     continueOnError: true,
   })) {
     ctx.checkCancel();
+    // A genuine 401 anywhere in the photo stream flips the client's sticky
+    // sessionExpired flag. Abort the whole run rather than quietly marking the
+    // remaining photos as "permanently failed" — that path not only ships a
+    // truncated archive as if it were complete, it *persists* those IDs so
+    // every future run skips them too. This mirrors the session-expiry
+    // propagation already done for metadata/daily-report probes (ab24153);
+    // the photo download is the longest-running phase and the one most likely
+    // to outlive a session, so it needs the same guard. Individual photo
+    // failures (403 signed-URL expiry, 404, network) are still tolerated below.
+    if (ctx.client.sessionExpired) {
+      throw new BwAuthError(401, 'session expired during photo download');
+    }
     if (result.error) {
       ctx.logger.warn(`photo ${result.entry.objectId} failed: ${result.error.message}`);
       await ctx.cp.markFailed(result.entry.objectId);

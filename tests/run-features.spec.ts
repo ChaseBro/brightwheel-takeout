@@ -534,6 +534,48 @@ describe('run permaFailedPhotos', () => {
     expect(result.permaFailedPhotoIds).toEqual(['photo-doomed']);
   }, 15_000);
 
+  it('rejects with BwAuthError when the session expires mid photo-download (does NOT mark them perma-failed and finish "successfully")', async () => {
+    // Contrast with the 500-error case above: a 500 is a per-photo failure that
+    // continueOnError tolerates. A 401 is session death — the whole run must
+    // abort, not silently mark every remaining photo perma-failed (which would
+    // also poison future runs) and report success.
+    const fetchImpl = vi.fn().mockImplementation(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('cloudfront.net')) {
+        // 401 on the photo bytes → BwClient flips sessionExpired, throws BwAuthError(401).
+        return new Response('', { status: 401 });
+      }
+      if (url.includes('/activities')) {
+        const u = new URL(url);
+        if (u.searchParams.get('page') !== '0') return json({ activities: [] });
+        if (u.searchParams.get('action_type') === 'ac_photo') {
+          return json({
+            activities: [{
+              object_id: 'photo-1',
+              action_type: 'ac_photo',
+              event_date: '2026-06-16T09:30:00Z',
+              media: { image_url: 'https://x.cloudfront.net/cover/photo-1.jpg' },
+              target: { object_id: 'stu-1' },
+            }],
+            count: 1,
+          });
+        }
+      }
+      return json({ activities: [], results: [] });
+    }) as unknown as typeof fetch;
+    const { sink } = makeZipSink();
+    await expect(
+      run({
+        session,
+        sink,
+        progress: { post: () => {} },
+        fetchImpl,
+        format: 'csv',
+        include: { photos: true, notes: false, messages: false, viewer: false },
+      }),
+    ).rejects.toMatchObject({ name: 'BwAuthError' });
+  }, 15_000);
+
   it('skips photos in the caller-supplied permaFailedPhotos set (no download attempted)', async () => {
     const { fetch, calls } = trackingFetch();
     const { sink } = makeZipSink();
