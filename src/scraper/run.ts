@@ -53,6 +53,8 @@ import {
   writePhotoManifestJson,
 } from './formatters/json.js';
 import { writeWorkbook } from './formatters/xlsx.js';
+import { writeStoryMd } from './formatters/story.js';
+import { writeArchiveReadme } from './formatters/archive-readme.js';
 import {
   DAILY_REPORT_LABELS,
   fetchAdditionalActivities,
@@ -872,6 +874,54 @@ export async function run(opts: RunOptions): Promise<RunResult> {
         name: 'manifest.json',
         lastModified: new Date(startedAt),
         bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)),
+      });
+      // story.md — chronological narrative for consumer chatbots (ChatGPT,
+      // Claude, Gemini, Copilot, Perplexity, NotebookLM). Universally
+      // accepted format that stays under every product's upload cap even
+      // for multi-year exports.
+      const schoolName = manifestSectionForFile
+        ? (Object.values(manifestSectionForFile.schools ?? {}) as Array<{ name?: string }>)
+            .map((s) => s.name)
+            .find((n): n is string => Boolean(n))
+        : undefined;
+      const studentNames = session.studentIds
+        .map((sid) =>
+          manifestSectionForFile?.student_profiles?.[sid]?.displayName ||
+          (session as unknown as { studentNames?: Record<string, string> })
+            .studentNames?.[sid] ||
+          '',
+        )
+        .filter((n): n is string => Boolean(n));
+      await sink.push({
+        name: 'story.md',
+        lastModified: new Date(startedAt),
+        bytes: writeStoryMd({
+          notes: notesRows,
+          messages: messagesRows,
+          photos: photoRows,
+          manifest: formatterManifest,
+          schoolName,
+          studentNames,
+        }),
+      });
+      // README.md — first thing a guardian sees when they open the ZIP.
+      // Explains what each file is and points at story.md for the AI drop-in.
+      await sink.push({
+        name: 'README.md',
+        lastModified: new Date(startedAt),
+        bytes: writeArchiveReadme({
+          manifest: formatterManifest,
+          schoolName,
+          studentNames,
+          includes: {
+            notes: include.notes,
+            messages: include.messages,
+            photos: include.photos,
+            viewer: include.viewer,
+            dailyReports: include.dailyReports,
+          },
+          format,
+        }),
       });
       // Debug mode captures + higher-fidelity log dump (F-G).
       if (debug?.enabled) {
