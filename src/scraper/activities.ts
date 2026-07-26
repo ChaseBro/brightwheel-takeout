@@ -14,6 +14,7 @@
 import type { BwClient } from './bw-client.js';
 import type { BwActivitiesResponse, BwActivity } from './types.js';
 import { PACING } from './pacing.js';
+import { log } from '@/lib/log.js';
 
 const BASE = 'https://schools.mybrightwheel.com/api/v1/students';
 const DEFAULT_START = '2018-01-01T00:00:00.000Z'; // well before Brightwheel's youngest cohort
@@ -57,8 +58,16 @@ export async function* iterateActivities(
   const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   let page = 0;
   let totalSoFar = 0;
+  let consecutiveAllDup = 0;
   // Guardrail: paginated APIs occasionally loop; cap at a very generous ceiling.
   const HARD_PAGE_CAP = 500;
+  // A *single* full page of all-duplicates isn't proof we're done: the live
+  // feed can shift items across page boundaries under concurrent writes, so one
+  // page can fully overlap the previous while genuinely-new items still exist
+  // further back. Only conclude we're finished after this many consecutive
+  // full pages with zero new items (the HARD_PAGE_CAP remains the ultimate
+  // backstop against a true infinite loop).
+  const ALLDUP_STOP = 2;
   while (page < HARD_PAGE_CAP) {
     const url = buildUrl(studentId, opts, page);
     const resp = await client.getJson<BwActivitiesResponse>(url);
@@ -73,9 +82,26 @@ export async function* iterateActivities(
       yield act;
     }
     opts.onPage?.({ page, batchSize: batch.length, totalSoFar, count: resp.count });
+    // A short/empty page is the genuine last page.
     if (batch.length < pageSize || batch.length === 0) return;
-    // If a full page yielded zero new items we're stuck in a loop; bail.
-    if (newInBatch === 0) return;
+    if (newInBatch === 0) {
+      consecutiveAllDup++;
+      if (consecutiveAllDup >= ALLDUP_STOP) {
+        // Stop, but make it visible — if the server reported a higher `count`
+        // than we collected, this may be a real truncation rather than a clean
+        // end, and the diagnostic log should say so.
+        if (typeof resp.count === 'number' && totalSoFar < resp.count) {
+          log.warn(
+            `activities pagination stopped after ${ALLDUP_STOP} all-duplicate pages ` +
+              `at ${totalSoFar}/${resp.count} for student=${studentId.slice(0, 8)}… ` +
+              `(possible truncation from a shifting feed)`,
+          );
+        }
+        return;
+      }
+    } else {
+      consecutiveAllDup = 0;
+    }
     page++;
     if (delay > 0) await sleep(delay);
   }

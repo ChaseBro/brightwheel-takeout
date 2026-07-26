@@ -93,10 +93,11 @@ describe('activities pagination', () => {
     expect(got.length).toBe(3);
   });
 
-  it('terminates cleanly on a full page of duplicates (no infinite loop)', async () => {
-    // Guardrail: `iterateActivities` uses newInBatch===0 as a stop condition.
-    // A misbehaving server that returns the same 3 items on every page must
-    // not loop; the second page (all duplicates) should break out.
+  it('terminates cleanly on repeated full pages of duplicates (no infinite loop)', async () => {
+    // Guardrail: a misbehaving server that returns the same 3 items on every
+    // page must not loop. We now tolerate ONE transient all-duplicate page
+    // (the feed can shift under concurrent writes), so termination happens
+    // after two consecutive all-duplicate pages — still bounded, still no loop.
     const first = fixture.notes.slice(0, 3);
     let call = 0;
     const fetchImpl = vi.fn().mockImplementation(async () => {
@@ -108,11 +109,31 @@ describe('activities pagination', () => {
       pageSize: 3,
       delayMs: 0,
     });
-    // 3 unique items — the second page returned only duplicates → bail.
     expect(acts.length).toBe(3);
-    // Called exactly twice (page 0 filled the seen set; page 1 saw only
-    // duplicates and hit the newInBatch===0 bail).
-    expect(call).toBe(2);
+    // page 0 filled seen (3 new); page 1 all-dup (1st); page 2 all-dup (2nd) → bail.
+    expect(call).toBe(3);
+  });
+
+  it('does NOT truncate when a single all-duplicate page is followed by new items', async () => {
+    // The scenario the old single-page bail got wrong: a live feed shifts so
+    // page 1 fully overlaps page 0, but genuinely-new items still exist on
+    // page 2. The old code bailed at page 1 and lost them; now they're kept.
+    const pageA = fixture.notes.slice(0, 3); // page 0
+    const pageC = fixture.notes.slice(3, 6); // page 2 — new items
+    const fetchImpl = vi.fn().mockImplementation(async (url: string | URL) => {
+      const page = new URL(typeof url === 'string' ? url : url.toString()).searchParams.get('page');
+      if (page === '0') return json({ activities: pageA, count: 6 });
+      if (page === '1') return json({ activities: pageA, count: 6 }); // transient full overlap
+      if (page === '2') return json({ activities: pageC, count: 6 });
+      return json({ activities: [], count: 6 });
+    }) as unknown as typeof fetch;
+    const acts = await fetchAllActivities(client(fetchImpl), 'student-1', {
+      actionType: 'ac_note',
+      pageSize: 3,
+      delayMs: 0,
+    });
+    // All 6 unique items survive — the transient duplicate page did not stop us.
+    expect(acts.length).toBe(6);
   });
 
   it('respects an onPage callback for progress reporting', async () => {

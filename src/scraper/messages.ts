@@ -55,6 +55,11 @@ export async function fetchThreadMessages(
   let reportedCount: number | undefined;
   let hasMore = false;
   const HARD_PAGE_CAP = 500;
+  // Like /activities, tolerate a single transient all-duplicate full page (the
+  // feed can shift under concurrent writes) before treating the dedup barrier
+  // as end-of-data. has_more:false and a short page remain immediate stops.
+  const ALLDUP_STOP = 2;
+  let consecutiveAllDup = 0;
   let page = 0;
   let lastData: { has_more?: boolean } = {};
   for (; page < HARD_PAGE_CAP; page++) {
@@ -78,10 +83,24 @@ export async function fetchThreadMessages(
     //   - server explicitly says has_more:false (canonical)
     //   - page came back under the requested limit (heuristic — some BW
     //     endpoints omit has_more entirely)
-    //   - page yielded zero new items (dedup barrier)
+    //   - two consecutive full pages yielded zero new items (dedup barrier,
+    //     hardened against a transient shifted page)
     if (data.has_more === false) break;
     if (raw.length < pageLimit) break;
-    if (newInPage === 0) break;
+    if (newInPage === 0) {
+      if (++consecutiveAllDup >= ALLDUP_STOP) {
+        if (typeof reportedCount === 'number' && messages.length < reportedCount) {
+          logger.warn(
+            `messages: pagination stopped after ${ALLDUP_STOP} all-duplicate pages ` +
+              `at ${messages.length}/${reportedCount} on thread ${threadId.slice(0, 8)}… ` +
+              `(possible truncation from a shifting feed)`,
+          );
+        }
+        break;
+      }
+    } else {
+      consecutiveAllDup = 0;
+    }
   }
   if (page >= HARD_PAGE_CAP) {
     logger.warn(
