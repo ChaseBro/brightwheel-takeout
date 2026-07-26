@@ -59,7 +59,9 @@ export function writeArchiveReadme(input: ArchiveReadmeInput): Uint8Array {
         : '- **`notes.csv`, `messages.csv`, `photos.csv`** — spreadsheet-friendly. Opens in Excel, Numbers, Google Sheets.');
   }
   if (includes.dailyReports) {
-    p.push('- **`activities/`** — daily reports (health checks, food, naps, potty, incidents).');
+    p.push(format === 'json'
+      ? '- **`daily-reports.json`** — daily reports (health checks, food, naps, potty, incidents).'
+      : '- **`daily-reports.csv`** — daily reports (health checks, food, naps, potty, incidents).');
   }
   p.push('- **`manifest.json`** — machine-readable metadata (school, students, staff, counts).');
   p.push('- **`takeout.log`** — the diagnostic log of this export run. Useful if you file a bug.');
