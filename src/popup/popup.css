@@ -222,3 +222,12 @@ body {
 }
 .popup-footer a { color: var(--link); text-decoration: none; }
 .popup-footer a:hover { text-decoration: underline; }
+.popup-disclaimer {
+  margin: 0;
+  padding: 0 1rem 0.6rem;
+  font-size: 0.65rem;
+  color: var(--sage-deep);
+  opacity: 0.7;
+  text-align: center;
+  background: var(--surface);
+}

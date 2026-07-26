@@ -256,6 +256,7 @@ export function renderViewerHtml(): string {
     color: var(--sage-deep); font-size: 0.85rem; text-align: center;
     border-top: 1px solid var(--border);
   }
+  .viewer-disclaimer { opacity: 0.75; }
 </style>
 </head>
 <body>
@@ -284,6 +285,7 @@ export function renderViewerHtml(): string {
 <main id="root"><p class="empty">Loading…</p></main>
 <footer>
   <span id="footer-meta"></span>
+  <span class="viewer-disclaimer"> · Not affiliated with Brightwheel, Inc.</span>
 </footer>
 
 <div class="lightbox hidden" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
