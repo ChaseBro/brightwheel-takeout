@@ -108,21 +108,15 @@ describe('metadata orchestrator', () => {
     expect(meta.staff.unreachableSchools).toContain('sch-1');
   });
 
-  it('collectMetadata degrades gracefully on 401 from metadata probes (session-expiry still surfaces via primary paths)', async () => {
-    // Metadata probes (schools, students, staff) are all best-effort — a 401
-    // from any of them should log a warning and return an undefined/derived
-    // record, not kill the whole run. The primary data paths (notes, photos,
-    // messages) surface session death upstream; metadata is decoration.
+  it('collectMetadata rethrows BwAuthError so session-expiry is not swallowed', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(json(401, {})) as unknown as typeof fetch;
-    const meta = await collectMetadata(
-      client(fetchImpl),
-      { guardianId: 'g-1', studentIds: ['stu-1'] },
-      { notes: [noteActivity], photos: [], messages: [] },
-    );
-    // sch-1 is derived from the note activity's `.room.school_id`; the /schools
-    // probe 401s so the record exists but has no name.
-    expect(meta.schools['sch-1']).toBeDefined();
-    expect(meta.schools['sch-1']!.name).toBeUndefined();
+    await expect(
+      collectMetadata(
+        client(fetchImpl),
+        { guardianId: 'g-1', studentIds: ['stu-1'] },
+        { notes: [noteActivity], photos: [], messages: [] },
+      ),
+    ).rejects.toMatchObject({ name: 'BwAuthError' });
   });
 
   it('toManifestSection strips the `raw` blob so the manifest stays small', async () => {
