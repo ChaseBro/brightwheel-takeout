@@ -8,7 +8,7 @@
 // Session expiry (BwAuthError) is the one exception: it propagates so the
 // takeout page can prompt re-login.
 
-import type { BwClient } from './bw-client.js';
+import { BwAuthError, type BwClient } from './bw-client.js';
 import type { BwActivity, BwMessage } from './types.js';
 import type { RingLogger } from '@/lib/log.js';
 import { log as defaultLog } from '@/lib/log.js';
@@ -84,6 +84,14 @@ export async function collectMetadata(
     if ((err as Error).name === 'BwAuthError') throw err;
     logger.warn(`metadata: student-profile step failed: ${(err as Error).message}`);
   }
+  // fetchStudentProfile degrades ANY error (including a real 401) into the
+  // derived-only profile rather than throwing — that's correct in
+  // isolation (see student-profile.spec.ts), but it means a genuine
+  // session expiry hitting the /students/{id} probe would otherwise vanish
+  // silently here. client.sessionExpired is the side-channel that lets us
+  // catch that: it's only set on a true 401, never on a policy 403, so this
+  // can't misfire on the guardian-forbidden-endpoint case.
+  assertSessionAlive(client);
 
   // 3) School(s) — discover school_ids from the activities we already have,
   //    then probe each in sequence.
@@ -103,6 +111,7 @@ export async function collectMetadata(
       logger.warn(`metadata: schools step failed: ${(err as Error).message}`);
     }
   }
+  assertSessionAlive(client);
   // If a school probe returned nothing, seed a minimal SchoolInfo so the
   // viewer can at least render the id (rare — most guardians will have a
   // known school even without a probe endpoint).
@@ -133,8 +142,27 @@ export async function collectMetadata(
     if ((err as Error).name === 'BwAuthError') throw err;
     logger.warn(`metadata: staff step failed: ${(err as Error).message}`);
   }
+  assertSessionAlive(client);
 
   return { schools, studentProfiles, staff, studentToSchool };
+}
+
+/**
+ * Throws a fresh BwAuthError if `client` has observed a genuine 401 at any
+ * point so far. All three metadata sub-modules (student-profile, school,
+ * staff) deliberately swallow 401/403 at the individual-probe level — a
+ * single guardian-forbidden endpoint must not sink the whole metadata step
+ * — so a real session expiry produces no visible error from any of those
+ * `await` calls above. `BwClient.sessionExpired` is the only place that
+ * signal survives; checking it after each network phase is what lets
+ * `collectMetadata` honor its own documented contract (see file header)
+ * that session expiry propagates instead of being swallowed alongside the
+ * routine best-effort failures.
+ */
+function assertSessionAlive(client: BwClient): void {
+  if (client.sessionExpired) {
+    throw new BwAuthError(401, 'session expired during metadata collection');
+  }
 }
 
 /**

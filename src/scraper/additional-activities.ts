@@ -14,7 +14,7 @@
 // be teacher-only. Each probe that returns empty logs a WARN line — a real
 // run's diagnostic log will tell us which ones are worth keeping.
 
-import type { BwClient } from './bw-client.js';
+import { BwAuthError, type BwClient } from './bw-client.js';
 import type { BwActivity } from './types.js';
 import { iterateActivities } from './activities.js';
 import type { RingLogger } from '@/lib/log.js';
@@ -139,13 +139,24 @@ export async function fetchAdditionalActivities(
           totalCount++;
         }
       } catch (err) {
-        // Never let one kind's failure stop the export. Log so a Layer-3
-        // pass can see which action_types are guardian-visible.
+        // Never let one kind's failure stop the export EXCEPT a genuine
+        // session expiry (401): some daily-report kinds are plausibly
+        // teacher-only and will 403 by per-guardian policy on an
+        // otherwise-healthy session (same shape as the school/staff probes
+        // in metadata.ts) — that must stay best-effort. But a real 401
+        // means the cookie is gone, so every remaining (kind, student) pair
+        // would otherwise fail the same way and get logged as a misleading
+        // wall of "not guardian-visible" warnings while the export
+        // silently truncates. Propagate so the caller (run.ts) can stop and
+        // prompt re-login, matching collectMetadata's contract for the
+        // same failure mode.
+        if (err instanceof BwAuthError && err.status === 401) throw err;
+        // Log so a Layer-3 pass can see which action_types are guardian-visible.
         const name = (err as Error).name;
         if (name === 'BwNotFoundError') {
           logger.warn(`additional-activities: ${kind} for ${sid.slice(0, 8)}… returned 404 — kind may not exist for guardians`);
         } else if (name === 'BwAuthError') {
-          logger.warn(`additional-activities: ${kind} for ${sid.slice(0, 8)}… returned 401/403 — kind likely not guardian-visible`);
+          logger.warn(`additional-activities: ${kind} for ${sid.slice(0, 8)}… returned 403 — kind likely not guardian-visible`);
         } else {
           logger.warn(`additional-activities: ${kind} for ${sid.slice(0, 8)}… failed: ${(err as Error).message}`);
         }

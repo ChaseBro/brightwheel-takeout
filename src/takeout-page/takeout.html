@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brightwheel Takeout</title>
+<title>Takeout for Brightwheel</title>
 <link rel="stylesheet" href="./takeout.css">
 </head>
 <body>
 <header class="site-header">
   <div class="container header-row">
-    <a class="brand brand--link" href="./takeout.html" aria-label="Brightwheel Takeout home">
+    <a class="brand brand--link" href="./takeout.html" aria-label="Takeout for Brightwheel home">
       <img class="brand-mark" src="/icons/icon-128.png" alt="" width="52" height="52" />
       <div>
-        <h1>Brightwheel Takeout</h1>
+        <h1>Takeout for Brightwheel</h1>
         <p class="tagline">Your family's Brightwheel, in one export.</p>
       </div>
     </a>
@@ -138,7 +138,7 @@
         </label>
         <label class="check-row">
           <input type="checkbox" id="debug-mode">
-          <span><strong>Debug mode</strong> — Makes the export much larger and includes technical logs. Enable this only when the developer asks you to.</span>
+          <span><strong>Debug mode</strong> — adds a <code>debug/</code> folder to your archive containing the <strong>full, unedited Brightwheel responses</strong> from this run — including complete note and message text and your account details (your login cookie and tokens are never included). It stays on your computer; nothing is uploaded. Turn this on only if the developer asks, and only share that folder with someone you trust to see your child’s data.</span>
         </label>
       </details>
 
@@ -163,14 +163,19 @@
     </div>
   </section>
 
-  <section id="progress" class="panel panel--hidden">
+  <section id="progress" class="panel panel--hidden" aria-labelledby="progress-title">
     <h2 id="progress-title">Exporting…</h2>
-    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Export progress"><div id="progress-fill" class="progress-fill"></div></div>
     <div class="progress-meta">
       <span id="progress-step">Getting started…</span>
       <span id="progress-counter" class="mono"></span>
     </div>
     <div id="current-file" class="mono current-file"></div>
+    <!-- Visually-hidden polite announcer. Updated only when the export phase
+         changes (photos → notes → messages → … → done), so a screen-reader
+         user hears "Downloading photos", "Done", etc. without being flooded by
+         every per-photo counter tick. -->
+    <span id="progress-live" class="sr-only" aria-live="polite" aria-atomic="true"></span>
     <div class="actions">
       <button id="stop-btn" class="btn btn--muted">Stop</button>
       <span class="hint">Progress so far is saved — you can Resume later.</span>
@@ -206,9 +211,9 @@
     </details>
   </section>
 
-  <section id="done" class="panel panel--hidden panel--done">
+  <section id="done" class="panel panel--hidden panel--done" aria-labelledby="done-title">
     <div class="check-icon" aria-hidden="true">✓</div>
-    <h2>Archive saved</h2>
+    <h2 id="done-title">Archive saved</h2>
     <p id="done-summary" class="lead">Your Brightwheel archive is on disk.</p>
 
     <div id="done-contents" class="done-contents"></div>
@@ -231,7 +236,8 @@
 
 <footer class="site-footer">
   <div class="container footer-row">
-    <p>Brightwheel Takeout · runs entirely in your browser · <a href="https://github.com/ChaseBro/brightwheel-takeout" target="_blank" rel="noopener">Source</a></p>
+    <p>Takeout for Brightwheel · runs entirely in your browser · <a href="https://github.com/ChaseBro/brightwheel-takeout" target="_blank" rel="noopener">Source</a></p>
+    <p class="disclaimer">Not affiliated with Brightwheel. "Brightwheel" is a trademark of Brightwheel, Inc.</p>
   </div>
 </footer>
 

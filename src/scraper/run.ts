@@ -23,7 +23,7 @@ import type {
 import type { Sync } from '@/lib/sync.js';
 import type { RingLogger } from '@/lib/log.js';
 import { NullSync } from '@/lib/sync.js';
-import { BwClient } from './bw-client.js';
+import { BwClient, BwAuthError } from './bw-client.js';
 import { iterateActivities } from './activities.js';
 import { fetchThreadMessages } from './messages.js';
 import { downloadPhotoStream, makeRefetchUrl, planPhotoEntry } from './photos.js';
@@ -53,6 +53,8 @@ import {
   writePhotoManifestJson,
 } from './formatters/json.js';
 import { writeWorkbook } from './formatters/xlsx.js';
+import { writeStoryMd } from './formatters/story.js';
+import { writeArchiveReadme } from './formatters/archive-readme.js';
 import {
   DAILY_REPORT_LABELS,
   fetchAdditionalActivities,
@@ -265,8 +267,8 @@ async function processMessages(ctx: RunCtx): Promise<void> {
       if (ctx.skipAlreadyExported?.messages?.has(m.object_id)) continue;
       // BW's /messages endpoint doesn't support server-side date filtering,
       // so filter client-side on `created_at` (F-D).
-      if (ctx.dateRange?.from && !afterOrEqual(m.created_at, ctx.dateRange.from)) continue;
-      if (ctx.dateRange?.to && !beforeOrEqual(m.created_at, ctx.dateRange.to)) continue;
+      if (ctx.dateRange?.from && !afterOrEqual(m.created_at, ctx.dateRange.from, ctx.timeZone)) continue;
+      if (ctx.dateRange?.to && !beforeOrEqual(m.created_at, ctx.dateRange.to, ctx.timeZone)) continue;
       ctx.counts.messages++;
       ctx.processedIds.messages.push(m.object_id);
       ctx.messagesAgg.push(m);
@@ -345,6 +347,18 @@ async function downloadPhotos(ctx: RunCtx): Promise<void> {
     continueOnError: true,
   })) {
     ctx.checkCancel();
+    // A genuine 401 anywhere in the photo stream flips the client's sticky
+    // sessionExpired flag. Abort the whole run rather than quietly marking the
+    // remaining photos as "permanently failed" — that path not only ships a
+    // truncated archive as if it were complete, it *persists* those IDs so
+    // every future run skips them too. This mirrors the session-expiry
+    // propagation already done for metadata/daily-report probes (ab24153);
+    // the photo download is the longest-running phase and the one most likely
+    // to outlive a session, so it needs the same guard. Individual photo
+    // failures (403 signed-URL expiry, 404, network) are still tolerated below.
+    if (ctx.client.sessionExpired) {
+      throw new BwAuthError(401, 'session expired during photo download');
+    }
     if (result.error) {
       ctx.logger.warn(`photo ${result.entry.objectId} failed: ${result.error.message}`);
       await ctx.cp.markFailed(result.entry.objectId);
@@ -410,17 +424,28 @@ function actorName(a: { first_name?: string | null; last_name?: string | null } 
   return [a.first_name ?? '', a.last_name ?? ''].filter(Boolean).join(' ').trim();
 }
 
-/** True when `iso` is >= from (or from is falsy). Both interpreted as UTC. */
-function afterOrEqual(iso: string | undefined, from: string | null | undefined): boolean {
+/**
+ * True when the event instant `iso` is >= local start-of-day of the calendar
+ * date `from` in `timeZone`. Compares instants numerically so ISO
+ * fractional-second formatting differences can't skew the boundary.
+ */
+function afterOrEqual(
+  iso: string | undefined,
+  from: string | null | undefined,
+  timeZone: string,
+): boolean {
   if (!from) return true;
   if (!iso) return false;
-  return iso.slice(0, from.length) >= from.slice(0, 10) || iso >= from;
+  return Date.parse(iso) >= Date.parse(toStartOfDayIso(from, timeZone));
 }
-function beforeOrEqual(iso: string | undefined, to: string | null | undefined): boolean {
+function beforeOrEqual(
+  iso: string | undefined,
+  to: string | null | undefined,
+  timeZone: string,
+): boolean {
   if (!to) return true;
   if (!iso) return false;
-  // Compare on date-only granularity: "2026-07-15" matches "<=2026-07-15".
-  return (iso.slice(0, 10) <= to.slice(0, 10));
+  return Date.parse(iso) <= Date.parse(toEndOfDayIso(to, timeZone));
 }
 
 export async function run(opts: RunOptions): Promise<RunResult> {
@@ -534,8 +559,8 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   let completedOk = false;
 
   const activitiesDateOpts = {
-    ...(dateRange?.from ? { startDate: toStartOfDayIso(dateRange.from) } : {}),
-    ...(dateRange?.to ? { endDate: toEndOfDayIso(dateRange.to) } : {}),
+    ...(dateRange?.from ? { startDate: toStartOfDayIso(dateRange.from, timeZone) } : {}),
+    ...(dateRange?.to ? { endDate: toEndOfDayIso(dateRange.to, timeZone) } : {}),
   };
 
   // Helpers used by every kind — thin so run() reads top-to-bottom.
@@ -593,8 +618,8 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       try {
         const result = await fetchAdditionalActivities(client, session.studentIds, {
           logger,
-          ...(dateRange?.from ? { startDate: toStartOfDayIso(dateRange.from) } : {}),
-          ...(dateRange?.to ? { endDate: toEndOfDayIso(dateRange.to) } : {}),
+          ...(dateRange?.from ? { startDate: toStartOfDayIso(dateRange.from, timeZone) } : {}),
+          ...(dateRange?.to ? { endDate: toEndOfDayIso(dateRange.to, timeZone) } : {}),
           ...(opts.signal ? { signal: opts.signal } : {}),
         });
         dailyReportsByKind = result.byKind;
@@ -850,6 +875,54 @@ export async function run(opts: RunOptions): Promise<RunResult> {
         lastModified: new Date(startedAt),
         bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)),
       });
+      // story.md — chronological narrative for consumer chatbots (ChatGPT,
+      // Claude, Gemini, Copilot, Perplexity, NotebookLM). Universally
+      // accepted format that stays under every product's upload cap even
+      // for multi-year exports.
+      const schoolName = manifestSectionForFile
+        ? (Object.values(manifestSectionForFile.schools ?? {}) as Array<{ name?: string }>)
+            .map((s) => s.name)
+            .find((n): n is string => Boolean(n))
+        : undefined;
+      const studentNames = session.studentIds
+        .map((sid) =>
+          manifestSectionForFile?.student_profiles?.[sid]?.displayName ||
+          (session as unknown as { studentNames?: Record<string, string> })
+            .studentNames?.[sid] ||
+          '',
+        )
+        .filter((n): n is string => Boolean(n));
+      await sink.push({
+        name: 'story.md',
+        lastModified: new Date(startedAt),
+        bytes: writeStoryMd({
+          notes: notesRows,
+          messages: messagesRows,
+          photos: photoRows,
+          manifest: formatterManifest,
+          schoolName,
+          studentNames,
+        }),
+      });
+      // README.md — first thing a guardian sees when they open the ZIP.
+      // Explains what each file is and points at story.md for the AI drop-in.
+      await sink.push({
+        name: 'README.md',
+        lastModified: new Date(startedAt),
+        bytes: writeArchiveReadme({
+          manifest: formatterManifest,
+          schoolName,
+          studentNames,
+          includes: {
+            notes: include.notes,
+            messages: include.messages,
+            photos: include.photos,
+            viewer: include.viewer,
+            dailyReports: include.dailyReports,
+          },
+          format,
+        }),
+      });
       // Debug mode captures + higher-fidelity log dump (F-G).
       if (debug?.enabled) {
         await debug.writeInto((name, bytes) =>
@@ -969,14 +1042,63 @@ function pickSingleFileName(
   return `brightwheel-takeout-${date}.${ext}`;
 }
 
-function toStartOfDayIso(dateStr: string): string {
-  // dateStr is "YYYY-MM-DD" (or a leading substring of an ISO timestamp).
-  const day = dateStr.slice(0, 10);
-  return `${day}T00:00:00.000Z`;
+// The date-range picker is an <input type="date"> — a *calendar date* with no
+// zone. A guardian who picks "from 2024-06-01" means their own local June 1st,
+// not 2024-06-01T00:00Z. Converting the calendar date to a UTC instant with a
+// hardcoded `Z` (the old behavior) shifted every boundary by the guardian's
+// UTC offset, silently including/excluding a few hours of activities near each
+// edge for anyone not on UTC. These helpers resolve the boundary in the
+// guardian's actual IANA time zone instead.
+
+/** Offset (ms) of `timeZone` from UTC at the instant `utcMs`: wallclock − UTC. */
+function tzOffsetMs(utcMs: number, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const map: Record<string, number> = {};
+  for (const p of parts) if (p.type !== 'literal') map[p.type] = Number(p.value);
+  const hour = map.hour === 24 ? 0 : map.hour; // some engines emit hour 24 for midnight
+  const asUtc = Date.UTC(map.year, map.month - 1, map.day, hour, map.minute, map.second);
+  return asUtc - utcMs;
 }
-function toEndOfDayIso(dateStr: string): string {
+
+/**
+ * UTC ISO instant for local start-of-day (00:00:00.000) or end-of-day
+ * (23:59:59.999) on the calendar date `dateStr` in `timeZone`. Falls back to a
+ * plain UTC interpretation if the zone is unknown/invalid.
+ */
+function zonedDayBoundaryIso(dateStr: string, timeZone: string, end: boolean): string {
   const day = dateStr.slice(0, 10);
-  return `${day}T23:59:59.999Z`;
+  const [y, m, d] = day.split('-').map(Number);
+  const [hh, mm, ss, ms] = end ? [23, 59, 59, 999] : [0, 0, 0, 0];
+  try {
+    // Sample the zone offset at the millisecond-free instant (tzOffsetMs works
+    // in whole seconds — Intl doesn't expose fractional seconds), then apply it
+    // to the full wall-clock boundary. Offset is ms-independent, so this is
+    // exact. The only imprecision is within a DST transition landing between
+    // this second and the boundary, which doesn't happen at day edges.
+    const sample = Date.UTC(y, m - 1, d, hh, mm, ss, 0);
+    const offset = tzOffsetMs(sample, timeZone);
+    const wall = Date.UTC(y, m - 1, d, hh, mm, ss, ms);
+    return new Date(wall - offset).toISOString();
+  } catch {
+    return new Date(Date.UTC(y, m - 1, d, hh, mm, ss, ms)).toISOString();
+  }
+}
+
+function toStartOfDayIso(dateStr: string, timeZone: string): string {
+  return zonedDayBoundaryIso(dateStr, timeZone, false);
+}
+function toEndOfDayIso(dateStr: string, timeZone: string): string {
+  return zonedDayBoundaryIso(dateStr, timeZone, true);
 }
 
 function safeDate(iso: string | undefined): Date | undefined {

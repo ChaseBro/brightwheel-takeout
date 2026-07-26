@@ -22,8 +22,8 @@ const DEV_PUBLIC_KEY =
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'Brightwheel Takeout',
-  short_name: 'BW Takeout',
+  name: 'Takeout for Brightwheel',
+  short_name: 'Takeout',
   description:
     'Google-Takeout-style exporter for Brightwheel. One-shot ZIP of every photo, note, and message for your family.',
   version: pkg.version,
@@ -36,7 +36,7 @@ export default defineManifest({
   key: DEV_PUBLIC_KEY,
   minimum_chrome_version: '116',
   action: {
-    default_title: 'Brightwheel Takeout',
+    default_title: 'Takeout for Brightwheel',
     default_popup: 'src/popup/popup.html',
     default_icon: {
       '16': 'public/icons/icon-16.png',

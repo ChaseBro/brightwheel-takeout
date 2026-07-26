@@ -34,7 +34,7 @@ export interface ViewerData {
     /**
      * Enriched context populated by the metadata orchestrator. Optional so
      * older archives (pre-metadata) still render — the viewer degrades to
-     * the plain "Brightwheel Takeout" header when these are absent.
+     * the plain "Takeout for Brightwheel" header when these are absent.
      */
     schools?: Record<string, { schoolId: string; name?: string; timeZone?: string; city?: string; state?: string }>;
     student_profiles?: Record<string, {
@@ -78,7 +78,7 @@ export function renderViewerHtml(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brightwheel Takeout — Archive</title>
+<title>Takeout for Brightwheel — Archive</title>
 <style>
   :root {
     --primary: #4A6FA5;
@@ -256,11 +256,12 @@ export function renderViewerHtml(): string {
     color: var(--sage-deep); font-size: 0.85rem; text-align: center;
     border-top: 1px solid var(--border);
   }
+  .viewer-disclaimer { opacity: 0.75; }
 </style>
 </head>
 <body>
 <header>
-  <h1 id="header-title">Brightwheel Takeout</h1>
+  <h1 id="header-title">Takeout for Brightwheel</h1>
   <div class="meta" id="meta">Loading archive…</div>
   <div class="meta students" id="header-students"></div>
   <div class="controls">
@@ -284,9 +285,10 @@ export function renderViewerHtml(): string {
 <main id="root"><p class="empty">Loading…</p></main>
 <footer>
   <span id="footer-meta"></span>
+  <span class="viewer-disclaimer"> · Not affiliated with Brightwheel, Inc.</span>
 </footer>
 
-<div class="lightbox hidden" id="lightbox">
+<div class="lightbox hidden" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
   <button class="lb-close" type="button">Close (Esc)</button>
   <button class="lb-nav prev" type="button" aria-label="Previous">‹</button>
   <img id="lb-img" src="" alt="">
@@ -347,7 +349,7 @@ export function renderViewerHtml(): string {
 
   // Enriched header: append the school name to the H1 when known, and list
   // the students with their classroom below. Additive — an archive without
-  // these fields still shows the plain "Brightwheel Takeout" title.
+  // these fields still shows the plain "Takeout for Brightwheel" title.
   var manifest = DATA.manifest || {};
   var schools = manifest.schools || {};
   var profiles = manifest.student_profiles || {};
@@ -358,7 +360,7 @@ export function renderViewerHtml(): string {
   });
   var titleEl = document.getElementById('header-title');
   if (titleEl && schoolNames.length > 0) {
-    titleEl.textContent = 'Brightwheel Takeout — ' + schoolNames.join(' & ');
+    titleEl.textContent = 'Takeout for Brightwheel — ' + schoolNames.join(' & ');
   }
   var studentSummary = [];
   Object.keys(profiles).forEach(function (sid) {
@@ -383,7 +385,7 @@ export function renderViewerHtml(): string {
   document.getElementById('footer-meta').textContent =
     'Exported ' + fetchedAt +
     (DATA.manifest && DATA.manifest.extensionVersion
-      ? ' · Brightwheel Takeout v' + DATA.manifest.extensionVersion
+      ? ' · Takeout for Brightwheel v' + DATA.manifest.extensionVersion
       : '');
 
   function escapeHtml(s) {
@@ -463,14 +465,17 @@ export function renderViewerHtml(): string {
         return;
       }
       root.innerHTML = '<div class="grid">' + photos.map(function (p, i) {
-        return '<div class="grid-cell" data-i="' + i + '">' +
-          '<img loading="lazy" src="' + encodeURI(p.src) + '" alt="' + escapeHtml(p.text || '') + '">' +
+        var label = 'Photo' + (p.text ? ': ' + p.text : '') + (p.when ? ', ' + dayKey(p.when) : '');
+        return '<div class="grid-cell" data-i="' + i + '" tabindex="0" role="button" aria-label="' + escapeHtml(label) + '">' +
+          '<img loading="lazy" src="' + encodeURI(p.src) + '" alt="' + escapeHtml(p.text || 'Photo') + '">' +
           '<div class="caption">' + escapeHtml(dayKey(p.when)) + '</div>' +
           '</div>';
       }).join('') + '</div>';
       Array.prototype.forEach.call(root.querySelectorAll('.grid-cell'), function (cell) {
-        cell.addEventListener('click', function () {
-          openLightbox(photos, parseInt(cell.getAttribute('data-i'), 10));
+        function activate() { openLightbox(photos, parseInt(cell.getAttribute('data-i'), 10)); }
+        cell.addEventListener('click', activate);
+        cell.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); activate(); }
         });
       });
       return;
@@ -492,7 +497,7 @@ export function renderViewerHtml(): string {
         var body = [
           e.who ? '<div class="who">' + escapeHtml(e.who) + '</div>' : '',
           e.text ? '<div class="text">' + escapeHtml(e.text) + '</div>' : '',
-          e.src ? '<img loading="lazy" data-src="' + encodeURI(e.src) + '" src="' + encodeURI(e.src) + '" alt="' + escapeHtml(e.text || 'Photo') + '">' : '',
+          e.src ? '<img loading="lazy" data-src="' + encodeURI(e.src) + '" src="' + encodeURI(e.src) + '" alt="' + escapeHtml(e.text || 'Photo') + '" tabindex="0" role="button" aria-label="' + escapeHtml('Open photo' + (e.text ? ': ' + e.text : '')) + '">' : '',
           '<div class="when">' + escapeHtml(fmtWhen(e.when)) + '</div>',
         ].join('');
         return '<div class="entry">' + pill + '<div class="body">' + body + '</div></div>';
@@ -500,10 +505,14 @@ export function renderViewerHtml(): string {
       return '<section class="day-group"><h2>' + escapeHtml(day) + '</h2>' + rows + '</section>';
     }).join('');
     Array.prototype.forEach.call(root.querySelectorAll('.entry img'), function (img) {
-      img.addEventListener('click', function () {
+      function activate() {
         var src = img.getAttribute('data-src');
         var i = photoIdMap[src];
         if (i != null) openLightbox(photoIndex, i);
+      }
+      img.addEventListener('click', activate);
+      img.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); activate(); }
       });
     });
   }
@@ -511,11 +520,16 @@ export function renderViewerHtml(): string {
   var lb = document.getElementById('lightbox');
   var lbImg = document.getElementById('lb-img');
   var lbMeta = document.getElementById('lb-meta');
-  var lbPhotos = [], lbIndex = 0;
+  var lbPhotos = [], lbIndex = 0, lbReturnFocus = null;
   function openLightbox(photos, i) {
+    lbReturnFocus = document.activeElement;
     lbPhotos = photos; lbIndex = i;
     lb.classList.remove('hidden');
     updateLightbox();
+    // Move focus into the dialog so keyboard/screen-reader users are placed on
+    // it (and Esc/arrows work) instead of leaving focus behind the modal.
+    var closeBtn = lb.querySelector('.lb-close');
+    if (closeBtn) closeBtn.focus();
   }
   function updateLightbox() {
     var p = lbPhotos[lbIndex];
@@ -525,7 +539,12 @@ export function renderViewerHtml(): string {
     if (p.text) meta += ' — ' + p.text;
     lbMeta.textContent = (lbIndex + 1) + ' / ' + lbPhotos.length + '   ·   ' + meta;
   }
-  function closeLightbox() { lb.classList.add('hidden'); }
+  function closeLightbox() {
+    lb.classList.add('hidden');
+    // Return focus to the thumbnail that opened the lightbox.
+    if (lbReturnFocus && lbReturnFocus.focus) lbReturnFocus.focus();
+    lbReturnFocus = null;
+  }
   function prev() { lbIndex = (lbIndex - 1 + lbPhotos.length) % lbPhotos.length; updateLightbox(); }
   function next() { lbIndex = (lbIndex + 1) % lbPhotos.length; updateLightbox(); }
   lb.addEventListener('click', function (ev) {

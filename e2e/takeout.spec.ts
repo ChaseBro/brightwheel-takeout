@@ -6,39 +6,69 @@
 import { test, expect, chromium, type BrowserContext } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { readFileSync, mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(HERE, '..', 'dist');
+
+// The extension must be built before this suite runs (the persistent context
+// loads dist/ directly). `npm run test:e2e` builds first, but guard anyway so
+// a bare `playwright test` fails with an actionable message instead of a
+// confusing "manifest not found" mid-launch.
+function assertDistBuilt(): void {
+  if (!existsSync(resolve(DIST, 'manifest.json'))) {
+    throw new Error(
+      `Extension not built: ${resolve(DIST, 'manifest.json')} is missing.\n` +
+        `Run \`npm run build\` first, or use \`npm run test:e2e\` which builds automatically.`,
+    );
+  }
+}
+
+// Headed only when explicitly requested (HEADED=1) for local debugging.
+// Default is headless so many agents/CI can run this concurrently without
+// popping visible Chromium windows.
+//
+// IMPORTANT: MV3 extensions do NOT load under Playwright's default headless
+// (`chrome-headless-shell`). We must run the FULL Chromium in the *new*
+// headless mode, which is requested via the `--headless=new` arg while
+// keeping Playwright's own `headless` flag false (so it doesn't swap in the
+// extension-less headless-shell). See
+// https://playwright.dev/docs/chrome-extensions#headless-mode
+const HEADLESS = process.env.HEADED !== '1';
 
 // Tiny 1x1 JPEG (same bytes as the vitest fixture).
 const ONE_PIXEL_JPEG_BASE64 =
   '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==';
 const JPEG = Buffer.from(ONE_PIXEL_JPEG_BASE64, 'base64');
 
-async function launchWithExtension(): Promise<BrowserContext> {
+// Returns the context plus the temp profile dir so the caller can remove it
+// after close(). launchPersistentContext does NOT clean up its user-data-dir,
+// so without this each run leaks ~9MB of profile into the OS temp dir.
+async function launchWithExtension(): Promise<{ context: BrowserContext; userDataDir: string }> {
   const userDataDir = mkdtempSync(resolve(tmpdir(), 'bw-takeout-e2e-'));
   const context = await chromium.launchPersistentContext(userDataDir, {
+    // Keep Playwright's headless flag false and drive headlessness via
+    // `--headless=new` instead, so the full Chromium (which supports MV3
+    // extensions) is used rather than the extension-less headless-shell.
     headless: false,
     channel: 'chromium',
     args: [
+      ...(HEADLESS ? ['--headless=new'] : []),
       `--disable-extensions-except=${DIST}`,
       `--load-extension=${DIST}`,
       '--no-sandbox',
     ],
-    // Playwright's chromium supports --headless=new + extensions:
-    // https://playwright.dev/docs/chrome-extensions#testing
   });
-  return context;
+  return { context, userDataDir };
 }
 
 test.describe('takeout page (route-mocked BW)', () => {
   test('runs a full export and produces a ZIP with expected entries', async () => {
     // Sanity: dist must exist. Run `npm run build` first.
-    readFileSync(resolve(DIST, 'manifest.json'), 'utf8');
+    assertDistBuilt();
 
-    const context = await launchWithExtension();
+    const { context, userDataDir } = await launchWithExtension();
     try {
       // Route-mock every Brightwheel endpoint.
       await context.route(/schools\.mybrightwheel\.com\/api\/v[12]\/.*/, async (route) => {
@@ -161,6 +191,11 @@ test.describe('takeout page (route-mocked BW)', () => {
 
       await page.goto(takeoutUrl);
       await expect(page.locator('#student-panel')).toContainText('stu-1', { timeout: 5000 });
+      // The default flow is the single "Download everything to a folder"
+      // quick-start button. The format selector, ZIP-save button, and Start
+      // button live inside the (hidden-by-default) Customize panel — reveal it
+      // before driving them.
+      await page.locator('#customize-toggle').click();
       // Use the JSON format so the e2e output still matches the historical
       // envelope shape the viewer expects. CSV is the new default; JSON is
       // still supported and its output shape is the stable regression baseline.
@@ -179,6 +214,9 @@ test.describe('takeout page (route-mocked BW)', () => {
       expect(total).toBeGreaterThan(100);
     } finally {
       await context.close();
+      // launchPersistentContext leaves the profile dir behind; remove it so
+      // concurrent/repeated runs don't accumulate temp profiles.
+      rmSync(userDataDir, { recursive: true, force: true });
     }
   });
 });
