@@ -203,7 +203,7 @@ describe('run include-set', () => {
 // ---- Date range (F-D) -----------------------------------------------------
 
 describe('run date range', () => {
-  it('passes from/to into /activities as start_date + end_date', async () => {
+  it('passes from/to into /activities as start_date + end_date (UTC guardian)', async () => {
     const { fetch, calls } = trackingFetch();
     const { sink } = makeZipSink();
     await run({
@@ -212,6 +212,7 @@ describe('run date range', () => {
       progress: { post: () => {} },
       fetchImpl: fetch,
       format: 'json',
+      timeZone: 'UTC',
       dateRange: { from: '2026-06-01', to: '2026-06-30' },
       include: { photos: false, notes: true, messages: false, viewer: false },
     });
@@ -220,6 +221,30 @@ describe('run date range', () => {
     const q = new URL(noteCall!);
     expect(q.searchParams.get('start_date')).toBe('2026-06-01T00:00:00.000Z');
     expect(q.searchParams.get('end_date')).toBe('2026-06-30T23:59:59.999Z');
+  });
+
+  it('resolves from/to boundaries in the guardian time zone, not UTC', async () => {
+    // A guardian in America/New_York (UTC-4 in June) who picks "June 1 – June 30"
+    // means their LOCAL calendar days. Local midnight June 1 = 04:00Z; local
+    // end-of-day June 30 = 03:59:59.999Z on July 1. Sending UTC-midnight (the
+    // old behavior) shifted every boundary 4h, silently mis-including/excluding
+    // late-evening activities near both edges.
+    const { fetch, calls } = trackingFetch();
+    const { sink } = makeZipSink();
+    await run({
+      session,
+      sink,
+      progress: { post: () => {} },
+      fetchImpl: fetch,
+      format: 'json',
+      timeZone: 'America/New_York',
+      dateRange: { from: '2026-06-01', to: '2026-06-30' },
+      include: { photos: false, notes: true, messages: false, viewer: false },
+    });
+    const noteCall = calls.urls.find((u) => u.includes('action_type=ac_note'));
+    const q = new URL(noteCall!);
+    expect(q.searchParams.get('start_date')).toBe('2026-06-01T04:00:00.000Z');
+    expect(q.searchParams.get('end_date')).toBe('2026-07-01T03:59:59.999Z');
   });
 
   it('client-side messages date filter is INCLUSIVE on both boundaries', async () => {
@@ -249,11 +274,51 @@ describe('run date range', () => {
       progress: { post: () => {} },
       fetchImpl,
       format: 'csv',
+      timeZone: 'UTC',
       dateRange: { from: '2026-06-01', to: '2026-06-30' },
       include: { photos: false, notes: false, messages: true, viewer: false },
     });
     // m-start and m-end must pass; m-before and m-after must drop.
     expect(result.processedIds.messages.sort()).toEqual(['m-end', 'm-start']);
+  });
+
+  it('client-side messages date filter respects the guardian time zone', async () => {
+    // Same four messages, but the guardian is in America/New_York. The two
+    // UTC-midnight-ish timestamps land on the *previous/next* local calendar
+    // day, so the set that passes a "June 1 – June 30" LOCAL filter is
+    // different from the UTC set — proving the filter is zone-aware.
+    const fetchImpl = vi.fn().mockImplementation(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/message_threads/')) {
+        return json({
+          results: [
+            // 2026-06-01T00:00Z = 2026-05-31 20:00 local → BEFORE June 1 local → drop
+            { message: { object_id: 'm-utcstart', body: 'x', created_at: '2026-06-01T00:00:00.000Z' } },
+            // 2026-06-01T04:00Z = 2026-06-01 00:00 local → first instant of June 1 local → keep
+            { message: { object_id: 'm-localstart', body: 'x', created_at: '2026-06-01T04:00:00.000Z' } },
+            // 2026-07-01T03:59Z = 2026-06-30 23:59 local → last instant of June 30 local → keep
+            { message: { object_id: 'm-localend', body: 'x', created_at: '2026-07-01T03:59:59.999Z' } },
+            // 2026-07-01T04:00Z = 2026-07-01 00:00 local → after June 30 local → drop
+            { message: { object_id: 'm-utcend', body: 'x', created_at: '2026-07-01T04:00:00.000Z' } },
+          ],
+          count: 4,
+          has_more: false,
+        });
+      }
+      return json({ results: [], activities: [] });
+    }) as unknown as typeof fetch;
+    const { sink } = makeZipSink();
+    const result = await run({
+      session,
+      sink,
+      progress: { post: () => {} },
+      fetchImpl,
+      format: 'csv',
+      timeZone: 'America/New_York',
+      dateRange: { from: '2026-06-01', to: '2026-06-30' },
+      include: { photos: false, notes: false, messages: true, viewer: false },
+    });
+    expect(result.processedIds.messages.sort()).toEqual(['m-localend', 'm-localstart']);
   });
 
   it('filters messages client-side against created_at', async () => {
